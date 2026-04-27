@@ -316,7 +316,7 @@ python onnx/export_hf_to_tts_onnx.py \
 
 <br>
 <p align="center">
-    <img src="assets/images/evaluation_table_moss_audio_tokenizer_nano.png" width="95%"> <br>
+    <img src="assets/images/evaluation_table_moss_audio_tokenizer_nano.png" width="100%"> <br>
     开源音频 tokenizer 在语音、音频和音乐数据上的重建质量对比。
 </p>
 <br>

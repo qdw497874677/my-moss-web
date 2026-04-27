@@ -324,7 +324,7 @@ The table below compares the reconstruction quality of MOSS-Audio-Tokenizer-Nano
 
 <br>
 <p align="center">
-    <img src="assets/images/evaluation_table_moss_audio_tokenizer_nano.png" width="95%"> <br>
+    <img src="assets/images/evaluation_table_moss_audio_tokenizer_nano.png" width="100%"> <br>
     Reconstruction quality comparison of open-source audio tokenizers on speech and audio/music data.
 </p>
 <br>
