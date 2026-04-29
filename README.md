@@ -175,6 +175,15 @@ This version is designed to be more deployment-friendly while keeping the same c
 
 The ONNX entrypoints are `infer_onnx.py`, `app_onnx.py`, and the packaged CLI with `--backend onnx`.
 
+By default, all ONNX commands use `--execution-provider cpu`, so existing commands keep the same CPU behavior. If you have an NVIDIA GPU and a compatible `onnxruntime-gpu` installation, you can opt in to CUDA with `--execution-provider cuda`.
+
+To prepare a CUDA ONNX Runtime environment, replace the CPU ONNX Runtime wheel with the GPU wheel:
+
+```bash
+pip uninstall -y onnxruntime
+pip install "onnxruntime-gpu>=1.20.0"
+```
+
 If `--model-dir` is omitted, the script automatically checks `./models`. When the model files are missing, it downloads them on first run from:
 
 - [OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX)
@@ -193,6 +202,17 @@ python infer_onnx.py \
   --text "Welcome to the ONNX Runtime CPU demo."
 ```
 
+Optional CUDA execution:
+
+```bash
+python infer_onnx.py \
+  --execution-provider cuda \
+  --prompt-audio-path assets/audio/zh_1.wav \
+  --text "Welcome to the ONNX Runtime CUDA demo."
+```
+
+CUDA execution requires `onnxruntime-gpu`. 
+
 If you already have the ONNX assets in another directory, pass it explicitly:
 
 ```bash
@@ -208,6 +228,13 @@ You can also launch the ONNX-backed local web demo:
 
 ```bash
 python app_onnx.py
+```
+
+To run the ONNX web demo with CUDA, start it with:
+
+```bash
+python app_onnx.py \
+  --execution-provider cuda
 ```
 
 Then open `http://127.0.0.1:18083` in your browser.
@@ -259,11 +286,22 @@ moss-tts-nano generate \
   --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
 ```
 
+To opt in to CUDA:
+
+```bash
+moss-tts-nano generate \
+  --backend onnx \
+  --execution-provider cuda \
+  --prompt-speech assets/audio/zh_1.wav \
+  --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
+```
+
 Useful notes:
 
 - `moss-tts-nano generate` writes to `generated_audio/moss_tts_nano_output.wav` by default.
 - `--prompt-speech` is the friendly alias for the reference audio path used by voice cloning.
 - `--text-file` is supported for long-form synthesis.
+- ONNX CUDA execution requires `onnxruntime-gpu`; without `--execution-provider cuda`, ONNX inference remains CPU-only.
 
 ### CLI Command: `moss-tts-nano serve`
 
@@ -280,7 +318,15 @@ moss-tts-nano serve \
   --backend onnx
 ```
 
-This command forwards to `app.py`, keeps the model loaded in memory, and serves the local browser demo plus HTTP generation endpoints.
+For the ONNX web demo with CUDA:
+
+```bash
+moss-tts-nano serve \
+  --backend onnx \
+  --execution-provider cuda
+```
+
+This command forwards to the corresponding web app, keeps the model loaded in memory, and serves the local browser demo plus HTTP generation endpoints.
 
 For server deployment with paged KV cache, streaming, and an OpenAI-compatible `/v1/audio/speech` endpoint, please read the [vLLM-Omni MOSS-TTS-Nano README](https://github.com/vllm-project/vllm-omni/blob/main/examples/online_serving/moss_tts_nano/README.md).
 

@@ -21,6 +21,7 @@ from ort_cpu_runtime import (
     OrtCpuRuntime,
     _normalize_sample_mode,
     _resolve_stream_decode_frame_budget,
+    EXECUTION_PROVIDER_CPU,
     SAMPLE_MODE_FIXED,
     SAMPLE_MODE_FULL,
     SAMPLE_MODE_GREEDY,
@@ -287,6 +288,7 @@ class OnnxTtsRuntime(OrtCpuRuntime):
         max_new_frames: int | None = None,
         do_sample: bool | None = None,
         sample_mode: str | None = None,
+        execution_provider: str = EXECUTION_PROVIDER_CPU,
         output_dir: str | Path = DEFAULT_OUTPUT_DIR,
     ) -> None:
         resolved_model_dir = ensure_browser_onnx_model_dir(model_dir)
@@ -296,6 +298,7 @@ class OnnxTtsRuntime(OrtCpuRuntime):
             max_new_frames=max_new_frames,
             do_sample=do_sample,
             sample_mode=sample_mode,
+            execution_provider=execution_provider,
         )
         self.output_dir = Path(output_dir).expanduser().resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)

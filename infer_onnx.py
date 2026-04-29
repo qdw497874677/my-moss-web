@@ -20,7 +20,7 @@ def set_logging() -> None:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run native onnxruntime CPU inference on browser_onnx exported assets.")
+    parser = argparse.ArgumentParser(description="Run native onnxruntime inference on browser_onnx exported assets.")
     parser.add_argument(
         "--model-dir",
         default=None,
@@ -74,6 +74,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Use codec streaming decode path internally instead of full decode.",
     )
     parser.add_argument("--cpu-threads", type=int, default=4, help="onnxruntime intra-op thread count.")
+    parser.add_argument(
+        "--execution-provider",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="onnxruntime execution provider. cuda requires an onnxruntime-gpu build.",
+    )
     parser.add_argument("--max-new-frames", type=int, default=375, help="Maximum generated audio frames.")
     parser.add_argument("--voice-clone-max-text-tokens", type=int, default=75, help="Chunk long text by token budget.")
     parser.add_argument("--text-temperature", type=float, default=1.0, help="Text-layer sampling temperature.")
@@ -151,6 +157,7 @@ def main(argv: Optional[Sequence[str]] = None) -> dict[str, object]:
         max_new_frames=args.max_new_frames,
         do_sample=bool(args.do_sample),
         sample_mode=args.sample_mode,
+        execution_provider=args.execution_provider,
     )
     generation_defaults = runtime.manifest["generation_defaults"]
     generation_defaults["text_temperature"] = float(args.text_temperature)
@@ -197,12 +204,13 @@ def main(argv: Optional[Sequence[str]] = None) -> dict[str, object]:
         seed=args.seed,
     )
     logging.info(
-        "saved generated audio to %s sample_rate=%s frames=%s sample_mode=%s streaming=%s",
+        "saved generated audio to %s sample_rate=%s frames=%s sample_mode=%s streaming=%s execution_provider=%s",
         result["audio_path"],
         result["sample_rate"],
         int(result["audio_token_ids"].shape[0]),
         result["sample_mode"],
         result["streaming"],
+        runtime.execution_provider,
     )
     return result
 

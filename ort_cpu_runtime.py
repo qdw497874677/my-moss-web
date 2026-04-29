@@ -13,6 +13,8 @@ import onnxruntime as ort
 SAMPLE_MODE_GREEDY = "greedy"
 SAMPLE_MODE_FIXED = "fixed"
 SAMPLE_MODE_FULL = "full"
+EXECUTION_PROVIDER_CPU = "cpu"
+EXECUTION_PROVIDER_CUDA = "cuda"
 
 MANIFEST_CANDIDATE_RELATIVE_PATHS = (
     "browser_poc_manifest.json",
@@ -27,6 +29,33 @@ MODEL_DIR_ALIAS_MAP = {
 
 def _argmax(values: np.ndarray) -> int:
     return int(np.argmax(values))
+
+
+def _normalize_execution_provider(raw_execution_provider: str | None) -> str:
+    normalized = str(raw_execution_provider or EXECUTION_PROVIDER_CPU).strip().lower()
+    if normalized in {EXECUTION_PROVIDER_CPU, "CPUExecutionProvider".lower()}:
+        return EXECUTION_PROVIDER_CPU
+    if normalized in {EXECUTION_PROVIDER_CUDA, "gpu", "CUDAExecutionProvider".lower()}:
+        return EXECUTION_PROVIDER_CUDA
+    raise ValueError("execution_provider must be one of: cpu, cuda")
+
+
+def _resolve_ort_providers(execution_provider: str) -> list[Any]:
+    normalized = _normalize_execution_provider(execution_provider)
+    if normalized == EXECUTION_PROVIDER_CPU:
+        return ["CPUExecutionProvider"]
+    available_providers = set(ort.get_available_providers())
+    if "CUDAExecutionProvider" not in available_providers:
+        available = ", ".join(ort.get_available_providers()) or "none"
+        raise RuntimeError(
+            "CUDAExecutionProvider was requested, but this onnxruntime build does not expose it. "
+            "Install onnxruntime-gpu that matches your CUDA/cuDNN runtime. "
+            f"Available providers: {available}"
+        )
+    preload_dlls = getattr(ort, "preload_dlls", None)
+    if callable(preload_dlls):
+        preload_dlls()
+    return ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
 
 def _flatten3d_int32(nested: list[list[list[int]]]) -> tuple[np.ndarray, list[int]]:
@@ -288,9 +317,12 @@ class OrtCpuRuntime:
         max_new_frames: int | None = None,
         do_sample: bool | None = None,
         sample_mode: str | None = None,
+        execution_provider: str = EXECUTION_PROVIDER_CPU,
     ) -> None:
         self.model_dir = Path(model_dir).expanduser().resolve()
         self.thread_count = max(1, int(thread_count))
+        self.execution_provider = _normalize_execution_provider(execution_provider)
+        self.ort_providers = _resolve_ort_providers(self.execution_provider)
         self.manifest_path = self._resolve_manifest_path(self.model_dir)
         self.manifest_dir = self.manifest_path.parent
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
@@ -349,7 +381,13 @@ class OrtCpuRuntime:
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.intra_op_num_threads = self.thread_count
         options.inter_op_num_threads = 1
-        return ort.InferenceSession(str(path_value), sess_options=options, providers=["CPUExecutionProvider"])
+        session = ort.InferenceSession(str(path_value), sess_options=options, providers=self.ort_providers)
+        if self.execution_provider == EXECUTION_PROVIDER_CUDA and "CUDAExecutionProvider" not in session.get_providers():
+            raise RuntimeError(
+                "CUDAExecutionProvider was requested, but ONNX Runtime created a session without CUDA support "
+                f"for {path_value}. Actual providers: {session.get_providers()}"
+            )
+        return session
 
     def _create_sessions(self) -> dict[str, ort.InferenceSession]:
         tts_dir = self.tts_meta_path.parent
@@ -787,10 +825,13 @@ class OrtCpuRuntime:
 
 __all__ = [
     "CodecStreamingDecodeSession",
+    "EXECUTION_PROVIDER_CPU",
+    "EXECUTION_PROVIDER_CUDA",
     "OrtCpuRuntime",
     "SAMPLE_MODE_FIXED",
     "SAMPLE_MODE_FULL",
     "SAMPLE_MODE_GREEDY",
+    "_normalize_execution_provider",
     "_normalize_sample_mode",
     "_resolve_stream_decode_frame_budget",
 ]

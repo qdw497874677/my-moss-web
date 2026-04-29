@@ -26,16 +26,17 @@ from text_normalization_pipeline import WeTextProcessingManager
 
 APP_DIR = Path(__file__).resolve().parent
 REPO_ROOT = APP_DIR
-from ort_cpu_runtime import _resolve_stream_decode_frame_budget
+from ort_cpu_runtime import _normalize_execution_provider, _resolve_stream_decode_frame_budget
 
 _LEGACY_RENDER_INDEX_HTML = legacy_app._render_index_html
 
 
-class _CpuDeviceInfo:
-    type = "cpu"
+class _OnnxDeviceInfo:
+    def __init__(self, execution_provider: str) -> None:
+        self.type = "cuda" if _normalize_execution_provider(execution_provider) == "cuda" else "cpu"
 
     def __str__(self) -> str:
-        return "cpu"
+        return self.type
 
 
 class OnnxNanoTTSServiceAdapter:
@@ -45,6 +46,7 @@ class OnnxNanoTTSServiceAdapter:
         model_dir: str | Path | None,
         output_dir: str | Path | None = None,
         cpu_threads: int = 4,
+        execution_provider: str = "cpu",
         max_new_frames: int = 375,
         text_normalizer_manager: WeTextProcessingManager | None = None,
     ) -> None:
@@ -54,17 +56,20 @@ class OnnxNanoTTSServiceAdapter:
             model_dir=model_dir,
             thread_count=max(1, int(cpu_threads)),
             max_new_frames=int(max_new_frames),
+            execution_provider=execution_provider,
             output_dir=self.output_dir,
         )
         self.model_dir = self.runtime.model_dir
         self.runtime._text_normalizer_manager = text_normalizer_manager
-        self.device = _CpuDeviceInfo()
+        self.execution_provider = self.runtime.execution_provider
+        self.device = _OnnxDeviceInfo(self.execution_provider)
         self.dtype = "float32"
         self.attn_implementation = "fixed"
-        self._checkpoint_global_attn_implementation = "onnxruntime_cpu"
-        self._checkpoint_local_attn_implementation = "onnxruntime_cpu"
-        self._configured_global_attn_implementation = "onnxruntime_cpu"
-        self._configured_local_attn_implementation = "onnxruntime_cpu"
+        self._onnxruntime_implementation = f"onnxruntime_{self.execution_provider}"
+        self._checkpoint_global_attn_implementation = self._onnxruntime_implementation
+        self._checkpoint_local_attn_implementation = self._onnxruntime_implementation
+        self._configured_global_attn_implementation = self._onnxruntime_implementation
+        self._configured_local_attn_implementation = self._onnxruntime_implementation
         self.checkpoint_path = self.runtime.tts_meta_path.parent.resolve()
         self.audio_tokenizer_path = self.runtime.codec_meta_path.parent.resolve()
         self.thread_count = max(1, int(cpu_threads))
@@ -154,8 +159,8 @@ class OnnxNanoTTSServiceAdapter:
             "voice": str(voice or ""),
             "prompt_audio_path": str(prompt_audio_path or ""),
             "voice_clone_text_chunks": list(text_chunks),
-            "effective_global_attn_implementation": "onnxruntime_cpu",
-            "effective_local_attn_implementation": "onnxruntime_cpu",
+            "effective_global_attn_implementation": self._onnxruntime_implementation,
+            "effective_local_attn_implementation": self._onnxruntime_implementation,
             "voice_clone_chunk_batch_size": 1,
             "voice_clone_codec_batch_size": 1,
         }
@@ -392,6 +397,7 @@ class OnnxRequestRuntimeManager:
     _factory_model_dir: Path | None = None
     _factory_output_dir: Path | None = None
     _factory_max_new_frames: int = 375
+    _factory_execution_provider: str = "cpu"
     _factory_text_normalizer_manager: WeTextProcessingManager | None = None
 
     def __init__(self, default_runtime: OnnxNanoTTSServiceAdapter) -> None:
@@ -433,6 +439,7 @@ class OnnxRequestRuntimeManager:
             model_dir=self._factory_model_dir or self.default_runtime.model_dir,
             output_dir=self._factory_output_dir or self.default_runtime.output_dir,
             cpu_threads=cpu_threads,
+            execution_provider=self._factory_execution_provider,
             max_new_frames=self._factory_max_new_frames,
             text_normalizer_manager=self._factory_text_normalizer_manager,
         )
@@ -441,7 +448,7 @@ class OnnxRequestRuntimeManager:
 
     def resolve_runtime(self, requested: str | None) -> tuple[OnnxNanoTTSServiceAdapter, str]:
         del requested
-        return self.default_runtime, "cpu"
+        return self.default_runtime, self.default_runtime.execution_provider
 
     @contextmanager
     def _locked_runtime(self, cpu_threads: int | None) -> Iterator[tuple[OnnxNanoTTSServiceAdapter, str, int]]:
@@ -449,7 +456,7 @@ class OnnxRequestRuntimeManager:
         with self._lock:
             runtime = self._build_runtime_locked(resolved_cpu_threads)
         with self._execution_lock:
-            yield runtime, "cpu", resolved_cpu_threads
+            yield runtime, runtime.execution_provider, resolved_cpu_threads
 
     def call_with_runtime(
         self,
@@ -512,7 +519,7 @@ def _render_index_html_onnx(
     )
     html = html.replace(
         'This app is CPU-only. CPU Threads maps to torch.set_num_threads for that request.',
-        'This app is CPU-only. CPU Threads selects the cached ONNX runtime instance for that request.',
+        'This ONNX app uses the server-start execution provider. CPU Threads selects the cached ONNX runtime instance for that request.',
     )
     html = html.replace(
         '</style>',
@@ -591,6 +598,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=18083)
     parser.add_argument("--cpu-threads", type=int, default=max(1, int(os.cpu_count() or 1)))
+    parser.add_argument(
+        "--execution-provider",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="onnxruntime execution provider. cuda requires an onnxruntime-gpu build.",
+    )
     parser.add_argument("--max-new-frames", type=int, default=375)
     parser.add_argument("--share", action="store_true")
     return parser.parse_args(argv)
@@ -610,6 +623,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         model_dir=args.model_dir,
         output_dir=output_dir,
         cpu_threads=args.cpu_threads,
+        execution_provider=args.execution_provider,
         max_new_frames=args.max_new_frames,
         text_normalizer_manager=text_normalizer_manager,
     )
@@ -619,6 +633,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     OnnxRequestRuntimeManager._factory_model_dir = runtime.model_dir
     OnnxRequestRuntimeManager._factory_output_dir = output_dir
     OnnxRequestRuntimeManager._factory_max_new_frames = int(args.max_new_frames)
+    OnnxRequestRuntimeManager._factory_execution_provider = runtime.execution_provider
     OnnxRequestRuntimeManager._factory_text_normalizer_manager = text_normalizer_manager
     legacy_app.RequestRuntimeManager = OnnxRequestRuntimeManager
     legacy_app._render_index_html = _render_index_html_onnx

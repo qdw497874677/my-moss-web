@@ -154,56 +154,6 @@ python app.py
 
 然后在浏览器中打开 `http://127.0.0.1:18083`。
 
-### CLI 命令：`moss-tts-nano generate`
-
-安装后 `pip install -e .`，您可以直接调用打包的 CLI：
-
-```bash
-moss-tts-nano generate \
-  --prompt-speech assets/audio/zh_1.wav \
-  --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
-```
-
-如果要切到 ONNX CPU 后端，只需加上 `--backend onnx`：
-
-```bash
-moss-tts-nano generate \
-  --backend onnx \
-  --prompt-speech assets/audio/zh_1.wav \
-  --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
-```
-
-有用的提示：
-
-- `moss-tts-nano generate` 默认写入 `generated_audio/moss_tts_nano_output.wav`。
-- `--prompt-speech` 是用于语音克隆的参考音频路径的友好别名。
-- 支持 `--text-file` 用于长文本合成。
-
-### CLI 命令：`moss-tts-nano serve`
-
-您也可以通过打包的 CLI 启动网络演示：
-
-```bash
-moss-tts-nano serve
-```
-
-如果要启动 ONNX Web Demo：
-
-```bash
-moss-tts-nano serve \
-  --backend onnx
-```
-
-此命令转发到 `app.py`，将模型保持在内存中加载，并为本地浏览器演示和 HTTP 生成端点提供服务。
-
-如需以分页 KV 缓存、流式推理以及 OpenAI 兼容 `/v1/audio/speech` 接口部署服务，请参考 [vLLM-Omni MOSS-TTS-Nano README](https://github.com/vllm-project/vllm-omni/blob/main/examples/online_serving/moss_tts_nano/README.md)。
-
-### 微调
-
-微调教程已经提供。
-
-具体见 [./finetuning/README_zh.md](./finetuning/README_zh.md)。
-
 <a id="onnx-cpu-version"></a>
 
 ## ONNX CPU 版本
@@ -219,6 +169,15 @@ moss-tts-nano serve \
 - **单核可用性更强**：在 **MacBook Air M4** 上，仅使用 **1 核 CPU** 即可流畅运行。
 
 对应的 ONNX 入口包括 `infer_onnx.py`、`app_onnx.py`，以及带 `--backend onnx` 的打包 CLI。
+
+默认情况下，基于 ONNX Runtime CPU 运行，如果要切换到 GPU，需要安装 `onnxruntime-gpu`，然后可以通过 `--execution-provider cuda` 显式切到 CUDA。
+
+如果要准备 CUDA ONNX Runtime 环境，请把 CPU 版 ONNX Runtime wheel 替换成 GPU 版：
+
+```bash
+pip uninstall -y onnxruntime
+pip install "onnxruntime-gpu>=1.20.0"
+```
 
 如果不传 `--model-dir`，程序会默认检查 `./models`。当该目录下缺少模型时，会在首次运行时自动从下面两个 Hugging Face 仓库下载：
 
@@ -247,10 +206,28 @@ python infer_onnx.py \
   --text "欢迎使用 ONNX Runtime CPU 版本。"
 ```
 
+如果要使用 CUDA 推理：
+
+```bash
+python infer_onnx.py \
+  --execution-provider cuda \
+  --prompt-audio-path assets/audio/zh_1.wav \
+  --text "欢迎使用 ONNX Runtime CUDA 版本。"
+```
+
+CUDA 推理需要安装 `onnxruntime-gpu`。
+
 本地 Web Demo：
 
 ```bash
 python app_onnx.py
+```
+
+如果要用 CUDA 启动 ONNX Web Demo：
+
+```bash
+python app_onnx.py \
+  --execution-provider cuda
 ```
 
 然后在浏览器中打开 `http://127.0.0.1:18083`。
@@ -282,6 +259,75 @@ python onnx/export_hf_to_tts_onnx.py \
 - `tokenizer.model`
 
 这个脚本面向 ONNX 部署链路。只要 `MOSS-Audio-Tokenizer-Nano` 没变，原先基于它生成的 prompt audio codes 不需要重新生成。
+
+### CLI 命令：`moss-tts-nano generate`
+
+安装后 `pip install -e .`，您可以直接调用打包的 CLI：
+
+```bash
+moss-tts-nano generate \
+  --prompt-speech assets/audio/zh_1.wav \
+  --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
+```
+
+如果要切到 ONNX CPU 后端，只需加上 `--backend onnx`：
+
+```bash
+moss-tts-nano generate \
+  --backend onnx \
+  --prompt-speech assets/audio/zh_1.wav \
+  --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
+```
+
+ONNX 后端默认使用 CPU。如果要显式切到 CUDA：
+
+```bash
+moss-tts-nano generate \
+  --backend onnx \
+  --execution-provider cuda \
+  --prompt-speech assets/audio/zh_1.wav \
+  --text "欢迎关注模思智能、上海创智学院与复旦大学自然语言处理实验室。"
+```
+
+有用的提示：
+
+- `moss-tts-nano generate` 默认写入 `generated_audio/moss_tts_nano_output.wav`。
+- `--prompt-speech` 是用于语音克隆的参考音频路径的友好别名。
+- 支持 `--text-file` 用于长文本合成。
+- ONNX CUDA 推理需要安装 `onnxruntime-gpu`；不传 `--execution-provider cuda` 时，ONNX 推理仍然默认只使用 CPU。
+
+### CLI 命令：`moss-tts-nano serve`
+
+您也可以通过打包的 CLI 启动网络演示：
+
+```bash
+moss-tts-nano serve
+```
+
+如果要启动 ONNX Web Demo：
+
+```bash
+moss-tts-nano serve \
+  --backend onnx
+```
+
+如果要用 CUDA 启动 ONNX Web Demo：
+
+```bash
+moss-tts-nano serve \
+  --backend onnx \
+  --execution-provider cuda
+```
+
+此命令会转发到对应的 Web App，将模型保持在内存中加载，并为本地浏览器演示和 HTTP 生成端点提供服务。
+
+如需以分页 KV 缓存、流式推理以及 OpenAI 兼容 `/v1/audio/speech` 接口部署服务，请参考 [vLLM-Omni MOSS-TTS-Nano README](https://github.com/vllm-project/vllm-omni/blob/main/examples/online_serving/moss_tts_nano/README.md)。
+
+### 微调
+
+微调教程已经提供。
+
+具体见 [./finetuning/README_zh.md](./finetuning/README_zh.md)。
 
 ## MOSS-Audio-Tokenizer-Nano
 

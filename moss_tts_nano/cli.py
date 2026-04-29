@@ -91,6 +91,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=4,
         help="ONNX backend only. onnxruntime intra-op thread count.",
     )
+    generate_parser.add_argument(
+        "--execution-provider",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="ONNX backend only. onnxruntime execution provider. cuda requires onnxruntime-gpu.",
+    )
     generate_parser.add_argument("--max-new-frames", type=int, default=375)
     generate_parser.add_argument("--voice-clone-max-text-tokens", type=int, default=75)
     generate_parser.add_argument(
@@ -180,6 +186,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="ONNX backend only. onnxruntime intra-op thread count.",
     )
     serve_parser.add_argument(
+        "--execution-provider",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="ONNX backend only. onnxruntime execution provider. cuda requires onnxruntime-gpu.",
+    )
+    serve_parser.add_argument(
         "--max-new-frames",
         type=int,
         default=375,
@@ -198,7 +210,7 @@ def _validate_onnx_generate_args(args: argparse.Namespace) -> None:
     if args.prompt_text:
         raise SystemExit("The ONNX backend does not support `--prompt-text` yet.")
     if args.device not in {"auto", "cpu"}:
-        raise SystemExit("The ONNX backend is CPU-only. Use `--device auto` or `--device cpu`.")
+        raise SystemExit("For the ONNX backend, use `--execution-provider cuda` instead of `--device cuda`.")
     if args.dtype not in {"auto", "float32"}:
         raise SystemExit("The ONNX backend supports only `--dtype auto` or `--dtype float32`.")
 
@@ -273,6 +285,8 @@ def _run_generate_onnx(args: argparse.Namespace) -> int:
         str(int(bool(args.realtime_streaming_decode))),
         "--cpu-threads",
         str(args.cpu_threads),
+        "--execution-provider",
+        str(args.execution_provider),
         "--max-new-frames",
         str(args.max_new_frames),
         "--voice-clone-max-text-tokens",
@@ -320,7 +334,7 @@ def _run_generate(args: argparse.Namespace) -> int:
 
 def _validate_onnx_serve_args(args: argparse.Namespace) -> None:
     if args.device not in {"auto", "cpu"}:
-        raise SystemExit("The ONNX backend is CPU-only. Use `--device auto` or `--device cpu`.")
+        raise SystemExit("For the ONNX backend, use `--execution-provider cuda` instead of `--device cuda`.")
     if args.dtype not in {"auto", "float32"}:
         raise SystemExit("The ONNX backend supports only `--dtype auto` or `--dtype float32`.")
     if args.attn_implementation != "auto":
@@ -367,6 +381,8 @@ def _run_serve_onnx(args: argparse.Namespace) -> int:
         str(args.port),
         "--cpu-threads",
         str(args.cpu_threads),
+        "--execution-provider",
+        str(args.execution_provider),
         "--max-new-frames",
         str(args.max_new_frames),
     ]
