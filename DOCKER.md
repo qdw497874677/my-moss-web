@@ -4,7 +4,7 @@ This repository now includes a simple Docker build focused on the **ONNX CPU** w
 
 ## What it runs
 
-- Web UI: `http://localhost:18083`
+- Web UI: `http://localhost:18183`
 - Backend: the FastAPI app from `app_onnx.py`
 - Model storage: mounted to `./models`
 - Generated audio: mounted to `./generated_audio`
@@ -26,7 +26,7 @@ docker compose up --build
 Then open:
 
 ```text
-http://127.0.0.1:18083
+http://127.0.0.1:18183
 ```
 
 Run in background:
@@ -53,7 +53,7 @@ Run:
 
 ```bash
 docker run --rm -it \
-  -p 18083:18083 \
+  -p 18183:18083 \
   -v "$(pwd)/models:/app/models" \
   -v "$(pwd)/generated_audio:/app/generated_audio" \
   -v "$(pwd)/hf-cache:/app/.cache/huggingface" \

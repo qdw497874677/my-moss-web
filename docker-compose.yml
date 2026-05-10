@@ -6,7 +6,7 @@ services:
     container_name: moss-tts-nano
     network_mode: bridge
     ports:
-      - "18083:18083"
+      - "18183:18083"
     volumes:
       - ./models:/app/models
       - ./generated_audio:/app/generated_audio

@@ -61,7 +61,7 @@ docker compose up -d --build
 启动成功后，浏览器访问：
 
 ```text
-http://127.0.0.1:18083
+http://127.0.0.1:18183
 ```
 
 ## 4. 容器默认行为
@@ -174,7 +174,7 @@ docker compose version
 默认端口是：
 
 ```text
-18083
+18183
 ```
 
 如果端口冲突，可以修改 `docker-compose.yml` 中的端口映射。
@@ -217,7 +217,7 @@ docker compose up --build
 然后打开：
 
 ```text
-http://127.0.0.1:18083
+http://127.0.0.1:18183
 ```
 
 如果页面能打开，就说明本地 WebUI 已经起来了。
