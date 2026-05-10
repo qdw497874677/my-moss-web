@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: moss-tts-nano
+    network_mode: bridge
     ports:
       - "18083:18083"
     volumes:

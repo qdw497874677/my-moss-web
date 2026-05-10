@@ -74,6 +74,18 @@ python app_onnx.py --host 0.0.0.0 --port 18083
 
 也就是使用上游官方自带的 **ONNX Web Demo**，同时提供本地浏览器页面和后端接口。
 
+另外，当前 `docker-compose.yml` 使用：
+
+```yaml
+network_mode: bridge
+```
+
+这样可以避免某些机器上因为 Docker Compose 自动创建项目网络而报错：
+
+```text
+all predefined address pools have been fully subnetted
+```
+
 ## 5. 数据持久化
 
 Compose 配置中已经挂载了以下目录：
