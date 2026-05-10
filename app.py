@@ -15,20 +15,13 @@ import uuid
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterator, Optional, Sequence, TypeVar
+from typing import TYPE_CHECKING, Callable, Iterator, Optional, Sequence, TypeVar
 
 import numpy as np
-import torch
 import uvicorn
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
-from moss_tts_nano_runtime import (
-    DEFAULT_AUDIO_TOKENIZER_PATH,
-    DEFAULT_CHECKPOINT_PATH,
-    DEFAULT_OUTPUT_DIR,
-    NanoTTSService,
-)
 from text_normalization_pipeline import (
     TextNormalizationSnapshot as SharedTextNormalizationSnapshot,
     WeTextProcessingManager as SharedWeTextProcessingManager,
@@ -39,6 +32,32 @@ from text_normalization_pipeline import (
 APP_DIR = Path(__file__).resolve().parent
 DEMO_METADATA_PATH = APP_DIR / "assets" / "demo.jsonl"
 PROMPT_UPLOAD_DIR = APP_DIR / ".app_prompt_uploads"
+
+if TYPE_CHECKING:
+    import torch as torch_module
+    from moss_tts_nano_runtime import NanoTTSService
+
+
+def _load_native_runtime_module():
+    from moss_tts_nano_runtime import (
+        DEFAULT_AUDIO_TOKENIZER_PATH,
+        DEFAULT_CHECKPOINT_PATH,
+        DEFAULT_OUTPUT_DIR,
+        NanoTTSService,
+    )
+
+    return {
+        "DEFAULT_AUDIO_TOKENIZER_PATH": DEFAULT_AUDIO_TOKENIZER_PATH,
+        "DEFAULT_CHECKPOINT_PATH": DEFAULT_CHECKPOINT_PATH,
+        "DEFAULT_OUTPUT_DIR": DEFAULT_OUTPUT_DIR,
+        "NanoTTSService": NanoTTSService,
+    }
+
+
+def _get_torch_module() -> "torch_module":
+    import torch
+
+    return torch
 
 
 @dataclass(frozen=True)
@@ -154,7 +173,7 @@ class WarmupSnapshot:
 
 
 class WarmupManager:
-    def __init__(self, runtime: NanoTTSService, text_normalizer_manager: "WeTextProcessingManager | None" = None) -> None:
+    def __init__(self, runtime: "NanoTTSService", text_normalizer_manager: "WeTextProcessingManager | None" = None) -> None:
         self.runtime = runtime
         self.text_normalizer_manager = text_normalizer_manager
         self._lock = threading.Lock()
@@ -246,12 +265,12 @@ T = TypeVar("T")
 
 
 class RequestRuntimeManager:
-    def __init__(self, default_runtime: NanoTTSService) -> None:
+    def __init__(self, default_runtime: "NanoTTSService") -> None:
         self.default_runtime = default_runtime
         self.default_cpu_threads = max(1, int(os.cpu_count() or 1))
         self._lock = threading.Lock()
         self._cpu_execution_lock = threading.Lock()
-        self._cpu_runtime: NanoTTSService | None = None
+        self._cpu_runtime: "NanoTTSService | None" = None
 
     @staticmethod
     def normalize_requested_execution_device(requested: str | None) -> str:
@@ -268,9 +287,11 @@ class RequestRuntimeManager:
         with self._lock:
             return self._cpu_runtime is not None
 
-    def _build_cpu_runtime_locked(self) -> NanoTTSService:
+    def _build_cpu_runtime_locked(self) -> "NanoTTSService":
         if self._cpu_runtime is not None:
             return self._cpu_runtime
+        runtime_module = _load_native_runtime_module()
+        NanoTTSService = runtime_module["NanoTTSService"]
         self._cpu_runtime = NanoTTSService(
             checkpoint_path=self.default_runtime.checkpoint_path,
             audio_tokenizer_path=self.default_runtime.audio_tokenizer_path,
@@ -282,7 +303,7 @@ class RequestRuntimeManager:
         )
         return self._cpu_runtime
 
-    def resolve_runtime(self, requested: str | None) -> tuple[NanoTTSService, str]:
+    def resolve_runtime(self, requested: str | None) -> tuple["NanoTTSService", str]:
         normalized = self.normalize_requested_execution_device(requested)
         if normalized != "cpu":
             return self.default_runtime, str(self.default_runtime.device.type)
@@ -307,7 +328,7 @@ class RequestRuntimeManager:
         *,
         requested_execution_device: str | None,
         cpu_threads: int | None,
-        callback: Callable[[NanoTTSService], T],
+        callback: Callable[["NanoTTSService"], T],
     ) -> tuple[T, str, int | None]:
         runtime, execution_device = self.resolve_runtime(requested_execution_device)
         if runtime.device.type != "cpu":
@@ -315,6 +336,7 @@ class RequestRuntimeManager:
 
         resolved_cpu_threads = self._resolve_cpu_threads(cpu_threads)
         with self._cpu_execution_lock:
+            torch = _get_torch_module()
             previous_threads = torch.get_num_threads()
             threads_changed = previous_threads != resolved_cpu_threads
             if threads_changed:
@@ -330,7 +352,7 @@ class RequestRuntimeManager:
         *,
         requested_execution_device: str | None,
         cpu_threads: int | None,
-        factory: Callable[[NanoTTSService], Iterator[T]],
+        factory: Callable[["NanoTTSService"], Iterator[T]],
     ) -> Iterator[tuple[T, str, int | None]]:
         runtime, execution_device = self.resolve_runtime(requested_execution_device)
         if runtime.device.type != "cpu":
@@ -340,6 +362,7 @@ class RequestRuntimeManager:
 
         resolved_cpu_threads = self._resolve_cpu_threads(cpu_threads)
         with self._cpu_execution_lock:
+            torch = _get_torch_module()
             previous_threads = torch.get_num_threads()
             threads_changed = previous_threads != resolved_cpu_threads
             if threads_changed:
@@ -660,7 +683,7 @@ async def _persist_uploaded_prompt_audio(upload: UploadFile | None) -> tuple[str
 def _render_index_html(
     *,
     request: Request,
-    runtime: NanoTTSService,
+    runtime: "NanoTTSService",
     demo_entries: list[DemoEntry],
     warmup_status: str,
     text_normalization_status: str,
@@ -2171,7 +2194,7 @@ def _render_index_html(
 
 
 def _build_app(
-    runtime: NanoTTSService,
+    runtime: "NanoTTSService",
     warmup_manager: WarmupManager,
     text_normalizer_manager: WeTextProcessingManager | None,
     root_path: str | None,
@@ -2262,7 +2285,7 @@ def _build_app(
             return f"{snapshot.message} error={snapshot.error}"
         return snapshot.message
 
-    def _resolve_attn_for_runtime(selected_runtime: NanoTTSService, requested_attn: str) -> str:
+    def _resolve_attn_for_runtime(selected_runtime: "NanoTTSService", requested_attn: str) -> str:
         normalized = str(requested_attn or "model_default").strip().lower()
         if selected_runtime.device.type != "cpu":
             return requested_attn
@@ -2311,7 +2334,7 @@ def _build_app(
                 job.state = "running"
                 job.run_status = f"Streaming realtime audio... exec={initial_execution_label}"
 
-            def _stream_factory(selected_runtime: NanoTTSService):
+            def _stream_factory(selected_runtime: "NanoTTSService"):
                 return selected_runtime.synthesize_stream(
                     text=text,
                     mode="voice_clone",
@@ -2768,7 +2791,7 @@ def _build_app(
         try:
             normalized_seed = None if seed in {"", "0"} else int(seed)
 
-            def _synthesize(selected_runtime: NanoTTSService):
+            def _synthesize(selected_runtime: "NanoTTSService"):
                 return selected_runtime.synthesize(
                     text=str(prepared_texts["text"]),
                     mode="voice_clone",
@@ -2837,6 +2860,12 @@ def _build_app(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
+    runtime_module = _load_native_runtime_module()
+    DEFAULT_CHECKPOINT_PATH = runtime_module["DEFAULT_CHECKPOINT_PATH"]
+    DEFAULT_AUDIO_TOKENIZER_PATH = runtime_module["DEFAULT_AUDIO_TOKENIZER_PATH"]
+    DEFAULT_OUTPUT_DIR = runtime_module["DEFAULT_OUTPUT_DIR"]
+    NanoTTSService = runtime_module["NanoTTSService"]
+
     parser = argparse.ArgumentParser(description="MOSS-TTS-Nano web demo")
     parser.add_argument("--checkpoint-path", "--checkpoint_path", dest="checkpoint_path", type=str, default=str(DEFAULT_CHECKPOINT_PATH))
     parser.add_argument(

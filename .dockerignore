@@ -1,5 +1,7 @@
 .git
 .gitignore
+.env
+.env.*
 .venv
 __pycache__/
 *.pyc
@@ -11,6 +13,10 @@ __pycache__/
 .mypy_cache/
 .idea/
 .vscode/
+.cache/
+hf-cache/
+.app_prompt_uploads/
+*.log
 generated_audio/
 models/
 finetuning/

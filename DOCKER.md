@@ -63,6 +63,6 @@ docker run --rm -it \
 ## Notes
 
 - This Docker setup is intentionally CPU-first and uses the ONNX path for easier local deployment.
-- The image installs the repository requirements, then installs the package itself with `--no-deps` so the existing entrypoints still work.
+- The image installs an ONNX-only dependency set instead of the full repository requirements, then installs the package itself with `--no-deps` so the existing entrypoints still work without pulling the full PyTorch stack.
 - First startup may take a while because ONNX assets can be downloaded automatically.
 - If you later want a GPU Docker variant, it is better to add a separate `Dockerfile.gpu` based on `onnxruntime-gpu` or a PyTorch CUDA base image.
